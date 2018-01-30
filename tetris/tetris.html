@@ -33,7 +33,7 @@
     (function () {
 
         var interval;
-        var speed = 100;
+        var speed = 300;
         var isGameOver = false;
 
         function Tetris() {
@@ -105,10 +105,11 @@
                 var board = this.viewport.board;
                 for (var y = 0; y < this.maxoy; y++) {
                     for (var x = 0; x < this.maxox; x++) {
-                        if (this.MAP[y][x] === 0) {
-                            board.drawRect(x, y, false);
-                        } else {
+                        if (this.MAP[y][x] === 1) {
                             board.drawRect(x, y, true);
+                        } else {
+                            this.MAP[y][x] = 0;
+                            board.drawRect(x, y, false);
                         }
                     }
                 }
@@ -138,7 +139,7 @@
                 if (rmLen !== 0) {
                     for (var i = 0; i < rmLen; i++) {
                         this.MAP.splice(removeRecode[i], 1);
-                        this.MAP.unshift([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                        this.MAP.unshift([]);
                         this.drawMapBoard();
                     }
                     this.viewport.second.score += this.viewport.second.scoreLevel[rmLen - 1] * rmLen;
@@ -173,7 +174,8 @@
                                 if (self.MAP[self.shapeSpirit.currentY + y] !== undefined
                                         && self.MAP[self.shapeSpirit.currentY + y][self.shapeSpirit.currentX + x] === 1
                                         || self.shapeSpirit.currentX + x >= self.maxox
-                                        || self.shapeSpirit.currentY + y >= self.maxoy) {
+                                        || self.shapeSpirit.currentY + y >= self.maxoy
+                                        || self.shapeSpirit.currentX - x < 0) {
                                     return;
                                 }
                                 newShape[y][x] = self.shapeSpirit.currentShape[xLen - 1 - x][y];
@@ -407,3 +409,6 @@
     }()).newGame();
 </script>
 </html>
+
+
+
