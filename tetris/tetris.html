@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        * {
+            padding: 0;
+            margin: 0;
+            border: none;
+        }
+
+        #board {
+            display: block;
+            position: absolute;
+            border: 1px #293047 solid;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+        }
+    </style>
+</head>
+<body>
+<canvas id="board"></canvas>
+</body>
+<script type="text/javascript">
+
+    (function () {
+
+        var interval;
+        var speed = 100;
+        var isGameOver = false;
+
+        function Tetris() {
+            this.viewport = new Viewport(this);
+            Keyboard.call(this);
+        }
+
+        Tetris.prototype = {
+            newGame: function () {
+                this.viewport.init();
+                this.eventHandlers();
+                var self = this;
+                if (interval !== undefined) {
+                    clearInterval(interval);
+                }
+                interval = setInterval(function () {
+                    self.viewport.main.action().down();
+                }, speed);
+            },
+            gameOver: function () {
+                if (interval !== undefined) {
+                    clearInterval(interval);
+                }
+                isGameOver = true;
+                this.viewport.board.drawText(1.5, 10, "游戏结束", 240, 60);
+            }
+        };
+
+        function Viewport(tetris) {
+            this.tetris = tetris;
+            this.board = new Board();
+            this.shapeSpirit = new ShapeSpirit();
+            this.shapeSpirit.init(this.board);
+            this.main = new MainView(this);
+            this.second = new SecondView(this);
+        }
+
+        Viewport.prototype = {
+            init: function () {
+                this.board.init(510, 600);
+                this.main.init();
+                this.second.init();
+            }
+        };
+
+        function MainView(viewport) {
+            this.viewport = viewport;
+            this.shapeSpirit = this.viewport.shapeSpirit;
+            this.MAP = [];
+            this.maxox = 10;
+            this.maxoy = 20;
+        }
+
+        MainView.prototype = {
+            init: function () {
+                this.initMapData();
+            },
+            initMapData: function () {
+                this.MAP = [];
+                for (var y = 0; y < this.maxoy; y++) {
+                    this.MAP[y] = [];
+                    for (var x = 0; x < this.maxox; x++) {
+                        this.MAP[y][x] = 0;
+                    }
+                }
+                this.drawMapBoard();
+            },
+            drawMapBoard: function () {
+                var board = this.viewport.board;
+                for (var y = 0; y < this.maxoy; y++) {
+                    for (var x = 0; x < this.maxox; x++) {
+                        if (this.MAP[y][x] === 0) {
+                            board.drawRect(x, y, false);
+                        } else {
+                            board.drawRect(x, y, true);
+                        }
+                    }
+                }
+            },
+            putSpiritToMAP: function () {
+                var currentShape = this.shapeSpirit.currentShape;
+                var offsetX = this.shapeSpirit.currentX - Math.floor(currentShape[0].length / 2);
+                var offsetY = this.shapeSpirit.currentY;
+                var removeRecode = [];
+                for (var y = 0, yLen = currentShape.length; y < yLen; y++) {
+                    for (var x = 0, xLen = currentShape[y].length; x < xLen; x++) {
+                        if (currentShape[y][x] === 1) {
+                            this.MAP[y + offsetY][x + offsetX] = currentShape[y][x];
+                        }
+                    }
+                    var isRemove = true;
+                    for (var mx = 0; mx < this.maxox; mx++) {
+                        if (this.MAP[y + offsetY][mx] === 0) {
+                            isRemove = false;
+                        }
+                    }
+                    if (isRemove) {
+                        removeRecode.push(y + offsetY);
+                    }
+                }
+                var rmLen = removeRecode.length;
+                if (rmLen !== 0) {
+                    for (var i = 0; i < rmLen; i++) {
+                        this.MAP.splice(removeRecode[i], 1);
+                        this.MAP.unshift([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+                        this.drawMapBoard();
+                    }
+                    this.viewport.second.score += this.viewport.second.scoreLevel[rmLen - 1] * rmLen;
+                    this.viewport.second.recordScoreBoard();
+                }
+            },
+            action: function () {
+                var self = this;
+                return {
+                    down: function () {
+                        var offsetY = self.shapeSpirit.currentY;
+                        var currentShape = self.shapeSpirit.currentShape;
+                        if (offsetY + currentShape.length < self.maxoy) {
+                            if (this.isValidMove(self.shapeSpirit.currentX, offsetY + 1)) {
+                                self.shapeSpirit.currentY++;
+                                return;
+                            }
+                        }
+                        self.putSpiritToMAP();
+                        self.shapeSpirit.random();
+                        self.viewport.second.drawShapeBoard();
+                    }, move: function (offsetX, offsetY) {
+                        self.shapeSpirit.drawShape(offsetX, offsetY, false);
+                    }, rotate: function () {
+                        var newShape = [];
+                        var xLen = self.shapeSpirit.currentShape.length;
+                        var yLen = self.shapeSpirit.currentShape[0].length;
+                        if (yLen === xLen) return;
+                        for (var y = 0; y < yLen; y++) {
+                            newShape[y] = [];
+                            for (var x = 0; x < xLen; x++) {
+                                if (self.MAP[self.shapeSpirit.currentY + y] !== undefined
+                                        && self.MAP[self.shapeSpirit.currentY + y][self.shapeSpirit.currentX + x] === 1
+                                        || self.shapeSpirit.currentX + x >= self.maxox
+                                        || self.shapeSpirit.currentY + y >= self.maxoy) {
+                                    return;
+                                }
+                                newShape[y][x] = self.shapeSpirit.currentShape[xLen - 1 - x][y];
+                            }
+                        }
+                        self.shapeSpirit.cleanShape();
+                        self.shapeSpirit.currentShape = newShape;
+                        var offsetX = self.shapeSpirit.currentX - Math.floor(self.shapeSpirit.currentShape[0].length / 2);
+                        var offsetY = self.shapeSpirit.currentY;
+                        self.shapeSpirit.drawShape(offsetX, offsetY, false);
+                    }, isValidMove: function (offsetX, offsetY) {
+                        var currentShape = self.shapeSpirit.currentShape;
+                        offsetX = offsetX - Math.floor(currentShape[0].length / 2);
+                        if (currentShape[0].length + offsetX > self.maxox || offsetX < 0) {
+                            return false;
+                        }
+                        for (var y = 0, yLen = currentShape.length; y < yLen; y++) {
+                            for (var x = 0, xLen = currentShape[y].length; x < xLen; x++) {
+                                if (self.MAP[y + offsetY] !== undefined
+                                        && self.MAP[y + offsetY][x + offsetX] === 1
+                                        && currentShape[y][x] === 1 || y + offsetY >= self.maxoy) {
+                                    if (offsetY - y <= 0) {
+                                        self.viewport.tetris.gameOver();
+                                    }
+                                    return false;
+                                }
+                            }
+                        }
+                        self.shapeSpirit.cleanShape();
+                        this.move(offsetX, offsetY);
+                        return true;
+                    }
+                };
+            }
+        };
+
+        function SecondView(viewport) {
+            this.viewport = viewport;
+            this.shapeSpirit = this.viewport.shapeSpirit;
+            this.scoreLevel = [10, 20, 30, 50];
+            this.maxox = 31;
+            this.maxoy = 20;
+            this.score = 0;
+        }
+
+        SecondView.prototype = {
+            init: function () {
+                this.shapeSpirit.random();
+                this.shapeBoard();
+                this.recordScoreBoard();
+            },
+            recordScoreBoard: function () {
+                var offsetX = this.viewport.main.maxox + 1;
+                var board = this.viewport.board;
+                board.cleanRect(offsetX, 6, 150, 60);
+                board.drawText(offsetX, 7.6, (Array(6).join(0) + this.score).slice(-6), 150);
+            },
+            shapeBoard: function () {
+                var board = this.viewport.board;
+                var offsetX = this.viewport.main.maxox;
+                for (var y = 0; y < this.maxoy; y++) {
+                    for (var x = offsetX; x < this.maxox; x++) {
+                        board.drawRect(x, y, true);
+                    }
+                }
+                this.drawShapeBoard();
+            },
+            drawShapeBoard: function () {
+                var offsetX = this.viewport.main.maxox + 1;
+                this.viewport.board.cleanRect(offsetX, 1, 150, 90);
+                var shapeLen = this.shapeSpirit.newShape[0].length;
+                offsetX = shapeLen === 2 ? offsetX + 1.5 : offsetX;
+                offsetX = shapeLen === 3 ? offsetX + 1 : offsetX;
+                offsetX = shapeLen === 4 ? offsetX + 0.5 : offsetX;
+                var offsetY = this.shapeSpirit.newShape.length === 1 ? 2 : 1.5;
+                this.shapeSpirit.drawShape(offsetX, offsetY, true);
+                this.viewport.main.action().isValidMove(this.shapeSpirit.currentX, this.shapeSpirit.currentY);
+            }
+        };
+
+        function ShapeSpirit() {
+            this.currentX = 5;
+            this.currentY = 0;
+            this.currentShape = [];
+            this.newShape = [];
+            this.board = {};
+            this.layout = [
+                [[0, 1, 0], [1, 1, 1]],
+                [[0, 0, 1], [1, 1, 1]],
+                [[1, 0, 0], [1, 1, 1]],
+                [[1, 1, 1, 1]],
+                [[0, 1, 1], [1, 1, 0]],
+                [[1, 1, 0], [0, 1, 1]],
+                [[1, 1], [1, 1]]
+            ]
+        }
+
+        ShapeSpirit.prototype = {
+            init: function (board) {
+                this.board = board;
+            },
+            random: function () {
+                this.currentX = 5;
+                this.currentY = 0;
+                if (this.newShape.length !== 0) {
+                    this.currentShape = this.newShape;
+                }
+                var key = Math.floor(Math.random() * 7);
+                this.newShape = this.layout[key];
+                if (this.currentShape.length === 0) {
+                    this.currentShape = this.newShape;
+                    this.random();
+                }
+            },
+            drawShape: function (offsetX, offsetY, isNew) {
+                var currentShape = isNew ? this.newShape : this.currentShape;
+                for (var y = 0, yLen = currentShape.length; y < yLen; y++) {
+                    for (var x = 0, xLen = currentShape[y].length; x < xLen; x++) {
+                        if (currentShape[y][x] === 1) {
+                            this.board.drawRect(x + offsetX, y + offsetY, true);
+                        }
+                    }
+                }
+            },
+            cleanShape: function () {
+                var offsetX = this.currentX - Math.floor(this.currentShape[0].length / 2);
+                for (var y = 0, yLen = this.currentShape.length; y < yLen; y++) {
+                    for (var x = 0, xLen = this.currentShape[y].length; x < xLen; x++) {
+                        if (this.currentShape[y][x] === 1) {
+                            this.board.drawRect(x + offsetX, y + this.currentY, false);
+                        }
+                    }
+                }
+            }
+        };
+
+        function Board() {
+            this.blockSize = 30;
+            this.width = 0;
+            this.height = 0;
+            this.board = document.getElementById("board");
+            this.ctx = this.board.getContext("2d");
+        }
+
+        Board.prototype = {
+            init: function (width, height) {
+                this.setSize(width, height);
+            },
+            setSize: function (width, height) {
+                this.clear(this.width, this.height);
+                if (typeof width === "number") {
+                    this.width = width;
+                }
+                if (typeof height === "number") {
+                    this.height = height;
+                }
+                this.board.width = this.width;
+                this.board.height = this.height;
+            },
+            drawText: function (x, y, text, maxWidth, fontSize) {
+                fontSize = fontSize || "52px";
+                var s = this.blockSize;
+                this.ctx.fillStyle = "black";
+                this.ctx.font = "bold " + fontSize + " Arial";
+                this.ctx.fillText(text, x * s, y * s, maxWidth);
+            },
+            drawRect: function (x, y, isfill) {
+                var s = this.blockSize;
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeStyle = "#999";
+                this.ctx.strokeRect(x * s + 0.5, y * s + 0.5, s, s);
+                if (isfill) {
+                    this.ctx.fillStyle = '#293047';
+                    this.ctx.fillRect(x * s + 1, y * s + 1, s - 1, s - 1);
+                } else {
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.fillRect(x * s + 1, y * s + 1, s - 1, s - 1);
+                }
+            },
+            cleanRect: function (x, y, width, height) {
+                var s = this.blockSize;
+                this.ctx.clearRect(x * s, y * s, width, height);
+            },
+            clear: function () {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+            }
+        };
+
+        function Keyboard() {
+            var self = this;
+            var keys = {
+                38: 'top',
+                39: 'right',
+                40: 'down',
+                37: 'left'
+            };
+            this.eventHandlers = function () {
+                document.addEventListener('keydown', this.keyPressEvent, true);
+            };
+            this.keyPressEvent = function (event) {
+                if (keys[event.keyCode] && !isGameOver)
+                    self.keyPress(keys[event.keyCode]);
+            };
+            this.keyPress = function (key) {
+                var offsetX = this.viewport.shapeSpirit.currentX;
+                var offsetY = this.viewport.shapeSpirit.currentY;
+                switch (key) {
+                    case 'top':
+                        this.viewport.main.action().rotate();
+                        break;
+                    case 'down':
+                        if (this.viewport.main.action().isValidMove(offsetX, offsetY + 1)) {
+                            this.viewport.shapeSpirit.currentY++;
+                        }
+                        break;
+                    case 'right':
+                        if (this.viewport.main.action().isValidMove(offsetX + 1, offsetY)) {
+                            this.viewport.shapeSpirit.currentX++;
+                        }
+                        break;
+                    case 'left':
+                        if (this.viewport.main.action().isValidMove(offsetX - 1, offsetY)) {
+                            this.viewport.shapeSpirit.currentX--;
+                        }
+                        break;
+                }
+            };
+        }
+
+        return new Tetris();
+    }()).newGame();
+</script>
+</html>
